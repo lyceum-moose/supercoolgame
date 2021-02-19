@@ -3,6 +3,7 @@ import pygame
 import random
 import time
 import sqlite3
+import pygame.freetype
 
 
 class lvlConst:
@@ -170,11 +171,15 @@ class Menu(BaseScene):
     def __init__(self):
         super(Menu, self).__init__()
         self.background = BaseSprite([0, 0], ["Menu.png"])
-        self.newGame = BaseSprite([50, 150], ["Start.png"])
-        self.exit = BaseSprite([50, 350], ["Exit.png"])
+        self.newGame = BaseSprite([50, 100], ["Start.png"])
+        self.statsBut = BaseSprite([50, 200], ["get_res.png"])
+        self.InstBut = BaseSprite([50, 300], ["instruct.png"])
+        self.exit = BaseSprite([50, 400], ["Exit.png"])
         self.myGroup = pygame.sprite.Group(
             self.background,
             self.newGame,
+            self.InstBut,
+            self.statsBut,
             self.exit
         )
 
@@ -188,13 +193,22 @@ class Menu(BaseScene):
                     self.started = False
                     gameScene = GameScene()
                     gameScene.start()
+                if self.statsBut.rect.collidepoint(pos):
+                    self.started = False
+                    gameScene = Stats()
+                    gameScene.start()
+                if self.InstBut.rect.collidepoint(pos):
+                    self.started = False
+                    gameScene = Instruct()
+                    gameScene.start()
         pygame.display.flip()
 
 
 class GameScene(BaseScene):
     def __init__(self):
         super(GameScene, self).__init__()
-        self.start_time = time.clock()
+        self.start_time = time.time()
+        print(self.start_time)
         self.les = BaseSprite([0, self.lvlConst.les + 50], ["les.jpg"])
         self.sand = BaseSprite([0, self.lvlConst.Bottom + 40], ["Bottom.jpg"])
         self.stock = BaseSprite([0, 0], ["stock.jpg"])
@@ -203,7 +217,7 @@ class GameScene(BaseScene):
         self.wild = Wild([0, 250], ["wild1.jpg", "wild2.jpg"])
         self.keycard = Keycard([100, self.lvlConst.Bottom], ["Keycard.png"])
         self.ledx = Ledx([300, self.lvlConst.Bottom], ["Ledx.png"])
-        self.upgrade_mes = Update_Mes([200, 200], ["can_upgrade.png"])
+        self.upgrade_mes = Update_Mes([0, 0], ["can_upgrade.png"])
         self.keycardCollected = False
         self.ledxCollected = False
         self.stage = 0
@@ -255,6 +269,9 @@ class GameScene(BaseScene):
                     self.bunker = Bunker([200, self.lvlConst.les - 50], ["Bunker" + str(self.stage + 1) + ".jpg"])
                     self.myGroup.add(self.bunker)
                     self.wild.speed += 2
+                    self.myGroup.remove([self.upgrade_mes])
+                    self.myGroup.remove([self.player])
+                    self.myGroup.add(self.player)
                     self.has_warning = True
 
             if self.player.checkCol(self.wild):
@@ -277,9 +294,9 @@ class GameScene(BaseScene):
                 self.started = False
                 con = sqlite3.connect("data/users.sqlite")
                 cur = con.cursor()
-                cur.execute(f"""INSERT INTO users VALUES('cooluser', '{time.clock() - self.start_time}')""")
+                cur.execute(f"""INSERT INTO users VALUES(NULL,'{os.getlogin()}', '{time.time() - self.start_time}')""")
                 con.commit()
-                success = Success(self.seconds)
+                success = Success(time.time() - self.start_time)
                 success.start()
 
             if self.keycardCollected and self.player.checkCol(self.bunker):
@@ -291,14 +308,13 @@ class GameScene(BaseScene):
             if self.player.ledx >= self.stages[self.stage][0] and self.player.keycard >= self.stages[self.stage][
                 1] and self.has_warning:
                 self.myGroup.add([self.upgrade_mes])
-                time.sleep(3)
-                self.myGroup.remove(self.upgrade_mes)
                 self.has_warning = False
 
             if self.player.health == 0:
                 newOver = GameOver()
                 newOver.start()
                 self.started = False
+            pygame.display.flip()
 
 
 class GameOver(BaseScene):
@@ -310,6 +326,7 @@ class GameOver(BaseScene):
             self.background,
             self.tryAgain
         )
+        self.time = time
 
     def main(self):
         for event in pygame.event.get():
@@ -322,8 +339,7 @@ class GameOver(BaseScene):
                 pos = pygame.mouse.get_pos()
                 if self.tryAgain.rect.collidepoint(pos):
                     self.started = False
-                    newScene = GameScene()
-                    newScene.start()
+                    Menu().start()
         pygame.display.flip()
 
 
@@ -333,6 +349,11 @@ class Success(BaseScene):
         self.score = score
         self.background = BaseSprite([0, 0], ["Success.png"])
         self.tryAgain = BaseSprite([50, 300], ["again.png"])
+        self.myGroup = pygame.sprite.Group(
+            self.background,
+            self.tryAgain
+        )
+        self.screen.fill((255, 0, 4))
 
     def main(self):
         for event in pygame.event.get():
@@ -340,10 +361,79 @@ class Success(BaseScene):
                 self.started = False
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()
-                if self.back.rect.collidepoint(pos):
+                if self.tryAgain.rect.collidepoint(pos):
                     self.started = False
                     Menu().start()
         pygame.display.flip()
+        GAME_FONT = pygame.freetype.Font("src/Lobster.ttf", 24)
+        GAME_FONT.render_to(self.screen, (75, 440), f"Congratulations! Your time: {round(self.score, 2)} sec",
+                            (0, 0, 0))
+
+
+class Stats(BaseScene):
+    def __init__(self):
+        super(Stats, self).__init__()
+        self.tryAgain = BaseSprite([50, 410], ["again.png"])
+        self.myGroup = pygame.sprite.Group(
+            self.tryAgain
+        )
+        self.screen.fill((255, 0, 4))
+
+    def main(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.started = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                if self.tryAgain.rect.collidepoint(pos):
+                    self.started = False
+                    Menu().start()
+        pygame.display.flip()
+        con = sqlite3.connect("data/users.sqlite")
+        cur = con.cursor()
+        result = cur.execute(f"""SELECT * FROM users ORDER BY time LIMIT 10""").fetchall()
+        GAME_FONT = pygame.freetype.Font("src/Lobster.ttf", 24)
+        temp = 20
+        for num, i in enumerate(result):
+            GAME_FONT.render_to(self.screen, (150, temp), f"{num + 1}  {i[1]}: {round(float(i[2]), 2)} sec",
+                                (0, 0, 0))
+            temp += 40
+
+
+class Instruct(BaseScene):
+    def __init__(self):
+        super(Instruct, self).__init__()
+        self.tryAgain = BaseSprite([50, 410], ["again.png"])
+        self.myGroup = pygame.sprite.Group(
+            self.tryAgain
+        )
+        self.screen.fill((255, 0, 4))
+
+    def main(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.started = False
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                pos = pygame.mouse.get_pos()
+                if self.tryAgain.rect.collidepoint(pos):
+                    self.started = False
+                    Menu().start()
+        pygame.display.flip()
+        GAME_FONT = pygame.freetype.Font("src/Lobster.ttf", 18)
+        text = ["КАК ИГРАТЬ??!?!?!?", "КОРОЧЕ СТРЕЛОЧКИ ДВИГАТЬСЯ",
+                "U - АПГРЕЙД ИГРЫ, НО НУЖНО ",
+                "СОБРАТЬ КЛЮЧКАРТЫ С ЛЕДИСКАМИ ЭТО ВАЖНО!!!",
+                "КАРТОЧКИ НУЖНО СОБИРАТЬ",
+                "СО ДНА И ОТНОСИТЬ НА БАЗУ",
+                "ИЗБЕГАЙТЕ СТРАШНОГО ЧЕЛА В БАЛАКЛАВЕ",
+                "P - пауза, да, крута",
+                "ИГРАЙТЕ И ПОПАДАЙТЕ В ЛИДЕРБОРД"]
+        temp = 20
+        for i in text:
+            GAME_FONT.render_to(self.screen, (0, temp),
+                                i,
+                                (255, 255, 255))
+            temp += 40
 
 
 if __name__ == '__main__':
